@@ -29,19 +29,29 @@ GroupLang-secretary-bot is a Telegram bot that transcribes voice messages, summa
 
 ## Installation
 
-1. Clone the repository:
-   ```
+### Downloading the Repository
+
+To download the repository, you can use Git. If you don't have Git installed, please follow the instructions on [Git's official website](https://git-scm.com/) to install it.
+
+1. Open your terminal or command prompt.
+2. Run the following command to clone the repository:
+   ```bash
    git clone https://github.com/yourusername/GroupLang-secretary-bot.git
+   ```
+3. Navigate into the cloned directory:
+   ```bash
    cd GroupLang-secretary-bot
    ```
 
-2. Install Poetry if you haven't already:
-   ```
+### Installing Dependencies
+
+1. Install Poetry if you haven't already:
+   ```bash
    curl -sSL https://install.python-poetry.org | python3 -
    ```
 
-3. Install dependencies using Poetry:
-   ```
+2. Install dependencies using Poetry:
+   ```bash
    poetry install
    ```
 
