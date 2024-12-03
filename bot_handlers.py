@@ -30,7 +30,7 @@ def handle_voice_message(message: Dict[str, Any], chat_id: int) -> None:
         file_id = message['voice']['file_id']
         file_url = get_telegram_file_url(file_id)
         
-        transcription = audio_transcriber.transcribe_audio(file_url)
+        transcription = audio_transcriber.transcribe_audio(file_url, language_code='en-US')
         summary, conversation_id = text_summarizer.summarize_text(transcription)
         
         logger.info(f"Processed voice message: file_id={file_id}, "

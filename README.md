@@ -50,7 +50,7 @@ To download the repository, you can use Git. If you don't have Git installed, pl
    curl -sSL https://install.python-poetry.org | python3 -
    ```
 
-2. Install dependencies using Poetry:
+2. Install dependencies using Poetry (ensure `langdetect` is included):
    ```bash
    poetry install
    ```

@@ -1,5 +1,6 @@
 import boto3
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, Union
+from langdetect import detect
 import requests
 import time
 import uuid
@@ -55,7 +56,7 @@ class AudioTranscriber:
         self.aws_services = aws_services
         self.bucket_name = 'audio-transcribe-temp'
 
-    def transcribe_audio(self, file_url: str) -> str:
+    def transcribe_audio(self, file_url: str, language_code: Union[str, None] = None) -> str:
         try:
             self.aws_services.create_s3_bucket_if_not_exists(self.bucket_name)
             logger.info(f"S3 Bucket created/confirmed: {self.bucket_name}")
@@ -66,7 +67,12 @@ class AudioTranscriber:
             logger.info(f"S3 URI: {s3_uri}")
 
             job_name = f"whisper_job_{int(time.time())}"
-            self.aws_services.start_transcription_job(job_name, s3_uri)
+            if not language_code:
+                transcription = self._wait_for_transcription(job_name)
+                language_code = detect(transcription)
+                logger.info(f"Detected language: {language_code}")
+
+            self.aws_services.start_transcription_job(job_name, s3_uri, language_code=language_code)
             logger.info(f"Transcription job started: {job_name}")
 
             transcription = self._wait_for_transcription(job_name)
