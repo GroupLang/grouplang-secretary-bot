@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from services import AWSServices, AudioTranscriber, TextSummarizer
 from utils.telegram_utils import send_message, get_telegram_file_url
 from utils.message_utils import format_response, create_tip_button
