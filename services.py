@@ -24,8 +24,44 @@ class AWSServices:
                     Bucket=bucket_name,
                     CreateBucketConfiguration={'LocationConstraint': self.region_name}
                 )
+                # Set up lifecycle policy after bucket creation
+                self._setup_lifecycle_policy(bucket_name)
             else:
                 raise
+        else:
+            # Ensure lifecycle policy exists for existing bucket
+            self._setup_lifecycle_policy(bucket_name)
+
+    def _setup_lifecycle_policy(self, bucket_name):
+        """Sets up a lifecycle policy that automatically deletes objects after 1 day"""
+        try:
+            lifecycle_config = {
+                'Rules': [
+                    {
+                        'ID': 'DeleteTempAudioFiles',
+                        'Status': 'Enabled',
+                        'Filter': {
+                            'Prefix': ''  # Apply to all objects
+                        },
+                        'Expiration': {
+                            'Days': 1  # Delete objects after 1 day
+                        },
+                        'AbortIncompleteMultipartUpload': {
+                            'DaysAfterInitiation': 1
+                        }
+                    }
+                ]
+            }
+            
+            self.s3_client.put_bucket_lifecycle_configuration(
+                Bucket=bucket_name,
+                LifecycleConfiguration=lifecycle_config
+            )
+            logger.info(f"Successfully set up lifecycle policy for bucket {bucket_name}")
+        except ClientError as e:
+            logger.error(f"Failed to set up lifecycle policy: {str(e)}")
+            # Don't raise the error as this is not critical for functionality
+            logger.warning("Continuing without lifecycle policy")
 
     def upload_file_to_s3(self, file_content, bucket_name, object_key):
         self.s3_client.upload_fileobj(BytesIO(file_content), bucket_name, object_key)
@@ -56,6 +92,7 @@ class AudioTranscriber:
         self.bucket_name = 'audio-transcribe-temp'
 
     def transcribe_audio(self, file_url: str) -> str:
+        object_key = None
         try:
             self.aws_services.create_s3_bucket_if_not_exists(self.bucket_name)
             logger.info(f"S3 Bucket created/confirmed: {self.bucket_name}")
@@ -70,12 +107,19 @@ class AudioTranscriber:
             logger.info(f"Transcription job started: {job_name}")
 
             transcription = self._wait_for_transcription(job_name)
-            self.aws_services.delete_file_from_s3(self.bucket_name, object_key)
-
             return transcription
         except Exception as e:
-            logger.error(f"An error occurred: {e}")
+            logger.error(f"An error occurred during transcription: {e}")
             raise
+        finally:
+            # Always try to clean up the temporary file, even if transcription fails
+            if object_key:
+                try:
+                    self.aws_services.delete_file_from_s3(self.bucket_name, object_key)
+                    logger.info(f"Cleaned up temporary file: {object_key}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to clean up temporary file {object_key}: {cleanup_error}")
+                    # Don't raise the cleanup error as the file will be removed by lifecycle policy
 
     def _download_audio(self, file_url: str) -> bytes:
         response = requests.get(file_url)
