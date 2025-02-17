@@ -1,3 +1,8 @@
+# Fixes #166: Implements S3 lifecycle policy for temporary audio cleanup
+# - Automatically deletes objects after 24 hours
+# - Cleans up incomplete multipart uploads
+# - Improves error handling and logging for file management
+
 import boto3
 from typing import Optional, Tuple, Dict
 import requests
@@ -24,8 +29,57 @@ class AWSServices:
                     Bucket=bucket_name,
                     CreateBucketConfiguration={'LocationConstraint': self.region_name}
                 )
+                self._setup_lifecycle_policy(bucket_name)
             else:
                 raise
+
+    def _setup_lifecycle_policy(self, bucket_name):
+        """
+        Sets up a lifecycle policy to automatically delete objects after 24 hours.
+        This ensures temporary audio files are cleaned up even if transcription fails.
+        Only sets up the policy if it doesn't exist or has different settings.
+        """
+        try:
+            # Check if lifecycle policy already exists
+            try:
+                existing_policy = self.s3_client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+                for rule in existing_policy.get('Rules', []):
+                    if (rule.get('ID') == 'DeleteTempAudioFiles' and 
+                        rule.get('Status') == 'Enabled' and 
+                        rule.get('Expiration', {}).get('Days') == 1):
+                        logger.info(f"Appropriate lifecycle policy already exists for bucket {bucket_name}")
+                        return
+            except ClientError as e:
+                if e.response['Error']['Code'] != 'NoSuchLifecycleConfiguration':
+                    raise
+
+            # Set up new lifecycle policy
+            lifecycle_config = {
+                'Rules': [
+                    {
+                        'ID': 'DeleteTempAudioFiles',
+                        'Status': 'Enabled',
+                        'Filter': {
+                            'Prefix': ''  # Apply to all objects
+                        },
+                        'Expiration': {
+                            'Days': 1  # Delete objects after 24 hours
+                        },
+                        'AbortIncompleteMultipartUpload': {
+                            'DaysAfterInitiation': 1  # Clean up incomplete multipart uploads
+                        }
+                    }
+                ]
+            }
+            
+            self.s3_client.put_bucket_lifecycle_configuration(
+                Bucket=bucket_name,
+                LifecycleConfiguration=lifecycle_config
+            )
+            logger.info(f"Successfully set up lifecycle policy for bucket {bucket_name}")
+        except ClientError as e:
+            logger.error(f"Failed to set up lifecycle policy: {str(e)}")
+            # Don't raise the error as this is a non-critical operation
 
     def upload_file_to_s3(self, file_content, bucket_name, object_key):
         self.s3_client.upload_fileobj(BytesIO(file_content), bucket_name, object_key)
@@ -56,6 +110,7 @@ class AudioTranscriber:
         self.bucket_name = 'audio-transcribe-temp'
 
     def transcribe_audio(self, file_url: str) -> str:
+        object_key = None
         try:
             self.aws_services.create_s3_bucket_if_not_exists(self.bucket_name)
             logger.info(f"S3 Bucket created/confirmed: {self.bucket_name}")
@@ -70,11 +125,21 @@ class AudioTranscriber:
             logger.info(f"Transcription job started: {job_name}")
 
             transcription = self._wait_for_transcription(job_name)
-            self.aws_services.delete_file_from_s3(self.bucket_name, object_key)
+            
+            # Only attempt deletion if transcription was successful
+            if transcription:
+                try:
+                    self.aws_services.delete_file_from_s3(self.bucket_name, object_key)
+                    logger.info(f"Successfully deleted temporary audio file: {object_key}")
+                except ClientError as e:
+                    logger.warning(f"Failed to delete temporary file {object_key}, will be cleaned up by lifecycle policy: {str(e)}")
 
             return transcription
         except Exception as e:
-            logger.error(f"An error occurred: {e}")
+            logger.error(f"An error occurred during transcription: {e}")
+            # No need to manually delete the file as it will be handled by the lifecycle policy
+            if object_key:
+                logger.info(f"Temporary file {object_key} will be cleaned up by lifecycle policy")
             raise
 
     def _download_audio(self, file_url: str) -> bytes:
