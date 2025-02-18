@@ -26,6 +26,31 @@ class AWSServices:
                 )
             else:
                 raise
+        
+        # Set up lifecycle policy for automatic cleanup after 24 hours
+        try:
+            lifecycle_config = {
+                'Rules': [
+                    {
+                        'ID': 'DeleteTempAudioFiles',
+                        'Status': 'Enabled',
+                        'Filter': {
+                            'Prefix': ''  # Apply to all objects
+                        },
+                        'Expiration': {
+                            'Days': 1  # Delete objects after 24 hours
+                        }
+                    }
+                ]
+            }
+            self.s3_client.put_bucket_lifecycle_configuration(
+                Bucket=bucket_name,
+                LifecycleConfiguration=lifecycle_config
+            )
+            logger.info(f"Successfully set up lifecycle policy for bucket {bucket_name}")
+        except ClientError as e:
+            logger.error(f"Failed to set up lifecycle policy: {str(e)}")
+            # Don't raise the error as the bucket is still usable without the policy
 
     def upload_file_to_s3(self, file_content, bucket_name, object_key):
         self.s3_client.upload_fileobj(BytesIO(file_content), bucket_name, object_key)
