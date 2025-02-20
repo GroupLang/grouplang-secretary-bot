@@ -175,3 +175,4 @@ Dockerfile
 
 # AWS
 deploy.sh
+.aider*
