@@ -2,6 +2,10 @@
 
 GroupLang-secretary-bot is a Telegram bot that transcribes voice messages, summarizes the content, and allows users to tip for the service. It utilizes AWS services for transcription and a custom API for summarization. The bot is designed to be deployed as an AWS Lambda function.
 
+## Hello World!
+
+Hello, World! Welcome to the GroupLang-secretary-bot project! 👋
+
 ## Table of Contents
 
 - [Features](#features)
