@@ -56,6 +56,7 @@ class AudioTranscriber:
         self.bucket_name = 'audio-transcribe-temp'
 
     def transcribe_audio(self, file_url: str) -> str:
+        object_key = None
         try:
             self.aws_services.create_s3_bucket_if_not_exists(self.bucket_name)
             logger.info(f"S3 Bucket created/confirmed: {self.bucket_name}")
@@ -70,12 +71,17 @@ class AudioTranscriber:
             logger.info(f"Transcription job started: {job_name}")
 
             transcription = self._wait_for_transcription(job_name)
-            self.aws_services.delete_file_from_s3(self.bucket_name, object_key)
-
             return transcription
         except Exception as e:
             logger.error(f"An error occurred: {e}")
             raise
+        finally:
+            if object_key:
+                try:
+                    self.aws_services.delete_file_from_s3(self.bucket_name, object_key)
+                    logger.info(f"Cleaned up temporary file: {object_key}")
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to clean up temporary file {object_key}: {cleanup_error}")
 
     def _download_audio(self, file_url: str) -> bytes:
         response = requests.get(file_url)
